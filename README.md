@@ -15,9 +15,11 @@
 ```
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <script src="https://cdn.jsdelivr.net/gh/Striker-Marketing/handleVideo@1/handleVideo.min.js"></script>
-handleVideo({
+<script>
+  handleVideo({
     videoSelector: '',
     videoUrl: '',
     isAutoplay: false,
   })
+</script>
 ```
