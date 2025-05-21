@@ -40,6 +40,7 @@ const handleVideo = ({ videoSelector, videoUrl, isAutoplay, playerColor }) => {
     const text = document.createElement("span");
     text.innerHTML = "Click for sound";
     text.style.transition = "max-height 0.2s, max-width 0.2s, padding 0.2s";
+    text.style.lineHeight = "1";
     handleText(text);
     svgWrapper.appendChild(text);
     svgWrapper.appendChild(svg);
