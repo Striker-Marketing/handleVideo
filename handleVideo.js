@@ -20,6 +20,7 @@ const handleVideo = ({ videoSelector, videoUrl, isAutoplay, playerColor, thumbUr
     hls.attachMedia(video);
   }
   const parent = video.parentElement;
+  parent.style.position = "relative";
   const button = document.createElement("div");
   Object.assign(button.style, {
     width: "100%",
