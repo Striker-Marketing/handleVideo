@@ -1,4 +1,4 @@
-const handleVideo = ({ videoSelector, videoUrl, isAutoplay, playerColor, thumbUrl }) => {
+const handleVideo = ({ videoSelector, videoUrl, isAutoplay, playerColor, thumbUrl, restartOnPlay }) => {
   const handleText = (text) => {
     if (text.style.maxWidth === "0px") {
       text.style.maxWidth = "200px";
@@ -58,6 +58,7 @@ const handleVideo = ({ videoSelector, videoUrl, isAutoplay, playerColor, thumbUr
     });
     button.addEventListener("click", () => {
       video.muted = false;
+      if (restartOnPlay) video.currentTime = 0;
       button.remove();
     });
     button.addEventListener("mouseenter", () => handleText(text));
