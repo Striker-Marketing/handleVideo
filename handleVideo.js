@@ -5,7 +5,12 @@
  *   - the browser has no native HLS support (i.e. not Safari/iOS), and
  *   - a video has scrolled close enough to the viewport to need a stream.
  *
- * Exposes window.handleVideo({ videoSelector, videoUrl }).
+ * Exposes window.handleVideo({ videoSelector, videoUrl, eager }).
+ *
+ * eager: true is for above-the-fold (banner/LCP) videos. The scroll observers are
+ * skipped, but the stream still waits for the load event + an idle slot so hls.js
+ * and the manifest never compete with the poster, which is the LCP element.
+ * Give eager videos a poster and preload it in <head> with fetchpriority="high".
  */
 (() => {
   const HLS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.7.1/dist/hls.light.min.js';
@@ -43,6 +48,26 @@
       document.head.appendChild(script);
     });
     return hlsPromise;
+  };
+
+  // cors must match how the origin is later fetched, or the warmed connection is not reused:
+  // hls.js pulls the stream with XHR (CORS), while its own <script> tag is no-cors.
+  const addPreconnect = (href, cors) => {
+    const origin = new URL(href, location.href).origin;
+    if (origin === location.origin) return;
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = origin;
+    if (cors) link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+  };
+
+  // Run after the load event, in an idle slot, so nothing here delays LCP or adds to TBT.
+  const whenIdleAfterLoad = (fn) => {
+    const idle = () =>
+      window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 1);
+    if (document.readyState === 'complete') idle();
+    else window.addEventListener('load', idle, { once: true });
   };
 
   const startStream = (video, videoUrl) => {
@@ -126,7 +151,7 @@
     overlay.addEventListener('mouseleave', () => toggleLabel(label));
   };
 
-  const handleVideo = ({ videoSelector, videoUrl }) => {
+  const handleVideo = ({ videoSelector, videoUrl, eager = false }) => {
     const video = document.querySelector(videoSelector);
     if (!video) return;
 
@@ -139,26 +164,42 @@
       return startStream(video, videoUrl);
     };
 
-    // Vertical margin only — horizontal neighbours in the carousel must not preload.
-    const loadObserver = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        loadObserver.disconnect();
-        loadStream();
-      },
-      { rootMargin: '200px 0px' },
-    );
-    loadObserver.observe(video);
+    if (eager) {
+      // Autoplay is only allowed muted + inline; the sound overlay unmutes on click.
+      video.muted = true;
+      video.playsInline = true;
+      if (!video.poster) {
+        console.warn(`handleVideo: eager video "${videoSelector}" has no poster; LCP will wait on the stream.`);
+      }
 
-    const playObserver = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        playObserver.disconnect();
-        loadStream().then(() => video.play().catch(() => {}));
-      },
-      { threshold: 0.25 },
-    );
-    playObserver.observe(video);
+      // Warm up DNS/TLS now without downloading anything.
+      const nativeHls = hasNativeHls(video);
+      addPreconnect(videoUrl, !nativeHls);
+      if (!nativeHls) addPreconnect(HLS_SRC, false);
+
+      whenIdleAfterLoad(() => loadStream().then(() => video.play().catch(() => {})));
+    } else {
+      // Vertical margin only — horizontal neighbours in the carousel must not preload.
+      const loadObserver = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          loadObserver.disconnect();
+          loadStream();
+        },
+        { rootMargin: '200px 0px' },
+      );
+      loadObserver.observe(video);
+
+      const playObserver = new IntersectionObserver(
+        ([entry]) => {
+          if (!entry.isIntersecting) return;
+          playObserver.disconnect();
+          loadStream().then(() => video.play().catch(() => {}));
+        },
+        { threshold: 0.25 },
+      );
+      playObserver.observe(video);
+    }
 
     buildSoundOverlay(video, () => {
       loadStream().then(() => {
