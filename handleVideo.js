@@ -5,12 +5,16 @@
  *   - the browser has no native HLS support (i.e. not Safari/iOS), and
  *   - a video has scrolled close enough to the viewport to need a stream.
  *
- * Exposes window.handleVideo({ videoSelector, videoUrl, eager }).
+ * Exposes window.handleVideo({ videoSelector, videoUrl, eager, newVideoThumb }).
  *
  * eager: true is for above-the-fold (banner/LCP) videos. The scroll observers are
  * skipped, but the stream still waits for the load event + an idle slot so hls.js
  * and the manifest never compete with the poster, which is the LCP element.
  * Give eager videos a poster and preload it in <head> with fetchpriority="high".
+ *
+ * newVideoThumb: a thumbnail image URL. When set, the video does NOT autoplay —
+ * the thumbnail is shown over the video and the stream loads and plays (with sound)
+ * only when the user clicks it. Nothing is fetched until that click.
  */
 (() => {
   const HLS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1.7.1/dist/hls.light.min.js';
@@ -151,7 +155,38 @@
     overlay.addEventListener('mouseleave', () => toggleLabel(label));
   };
 
-  const handleVideo = ({ videoSelector, videoUrl, eager = false }) => {
+  const buildThumbOverlay = (video, thumbUrl, onClick) => {
+    const parent = video.parentElement;
+    parent.style.position = 'relative';
+
+    const overlay = document.createElement('div');
+    Object.assign(overlay.style, {
+      width: '100%',
+      height: '100%',
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      zIndex: '1',
+      cursor: 'pointer',
+    });
+    parent.appendChild(overlay);
+
+    const img = document.createElement('img');
+    img.src = thumbUrl;
+    Object.assign(img.style, {
+      width: '100%',
+      height: '100%',
+      objectFit: 'cover',
+    });
+    overlay.appendChild(img);
+
+    overlay.addEventListener('click', () => {
+      onClick();
+      overlay.remove();
+    });
+  };
+
+  const handleVideo = ({ videoSelector, videoUrl, eager = false, newVideoThumb }) => {
     const video = document.querySelector(videoSelector);
     if (!video) return;
 
@@ -163,6 +198,18 @@
       started = true;
       return startStream(video, videoUrl);
     };
+
+    // Thumbnail mode: no autoplay, no preload. The click both loads and plays with sound.
+    if (newVideoThumb) {
+      buildThumbOverlay(video, newVideoThumb, () => {
+        loadStream().then(() => {
+          video.play();
+          video.muted = false;
+          video.currentTime = 0;
+        });
+      });
+      return;
+    }
 
     if (eager) {
       // Autoplay is only allowed muted + inline; the sound overlay unmutes on click.
