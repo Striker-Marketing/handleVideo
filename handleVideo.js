@@ -211,10 +211,12 @@
       return;
     }
 
+    // Autoplay (eager or lazy) is always muted + inline; the sound overlay unmutes on click.
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+
     if (eager) {
-      // Autoplay is only allowed muted + inline; the sound overlay unmutes on click.
-      video.muted = true;
-      video.playsInline = true;
       if (!video.poster) {
         console.warn(`handleVideo: eager video "${videoSelector}" has no poster; LCP will wait on the stream.`);
       }
